@@ -1,0 +1,17 @@
+{
+  "model_file": "best_model_LightGBM.pkl",
+  "scaler_file": "robust_scaler.pkl",
+  "feature_names": [
+    "age",
+    "alt",
+    "height",
+    "weight",
+    "pulse",
+    "BMI",
+    "month_sin",
+    "month_cos",
+    "hour_sin",
+    "hour_cos"
+  ],
+  "optimal_threshold": 0.5937238227143069
+}

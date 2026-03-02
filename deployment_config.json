@@ -1,0 +1,32 @@
+{
+  "model_name": "LightGBM",
+  "model_filename": "best_model_LightGBM.pkl",
+  "scaler_filename": "robust_scaler.pkl",
+  "features_filename": "feature_names.pkl",
+  "optimal_threshold": 0.5937238227143069,
+  "feature_names": [
+    "age",
+    "alt",
+    "height",
+    "weight",
+    "pulse",
+    "BMI",
+    "month_sin",
+    "month_cos",
+    "hour_sin",
+    "hour_cos"
+  ],
+  "performance_metrics": {
+    "AUC": 0.6992109980499832,
+    "Accuracy": 0.6528459866355366,
+    "F1_score": 0.6544871794871795,
+    "Precision": 0.6514076082622219,
+    "Recall": 0.6575960067627405,
+    "Specificity": 0.6480959665083327
+  },
+  "training_info": {
+    "random_state": 42,
+    "features_count": 10,
+    "deployment_date": "2026-03-02 11:52:24"
+  }
+}
