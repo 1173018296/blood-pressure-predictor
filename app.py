@@ -1,128 +1,190 @@
-# app.py - Streamlit血压分类预测应用
+# app.py - Blood Pressure Classification Prediction Application
 import streamlit as st
 import pickle
 import numpy as np
 import pandas as pd
 import json
-import sys
-import os
+import datetime
+import math
+import matplotlib.pyplot as plt
+import matplotlib
 
-# 设置页面配置
+matplotlib.use('Agg')  # Use non-interactive backend
+
+# Page configuration
 st.set_page_config(
-    page_title="血压分类预测工具",
+    page_title="Blood Pressure Prediction Tool",
     page_icon="❤️",
     layout="wide"
 )
 
-# 应用标题和说明
-st.title("❤️ 血压分类预测工具")
-st.markdown("### 基于机器学习模型的血压异常检测系统")
-st.markdown("填写生理参数，预测血压是否正常")
+# Application title
+st.title("❤️ Blood Pressure Classification Prediction")
+st.markdown("### Machine Learning-Based Blood Pressure Anomaly Detection System")
 
 
-# 加载配置和模型
+# Time conversion function
+def calculate_time_features(date_input, time_input):
+    """
+    Calculate sine and cosine values for month and hour from date and time
+
+    Parameters:
+        date_input: datetime.date object
+        time_input: datetime.time object
+
+    Returns:
+        month_sin, month_cos, hour_sin, hour_cos
+    """
+    # Extract month (1-12) and hour (0-23)
+    month = date_input.month
+    hour = time_input.hour
+
+    # Calculate sine and cosine values (consistent with training formula)
+    month_sin = math.sin(2 * math.pi * month / 12)
+    month_cos = math.cos(2 * math.pi * month / 12)
+    hour_sin = math.sin(2 * math.pi * hour / 24)
+    hour_cos = math.cos(2 * math.pi * hour / 24)
+
+    return month_sin, month_cos, hour_sin, hour_cos
+
+
+# Load model and configuration
 @st.cache_resource
 def load_model_and_config():
-    """加载模型和配置"""
+    """Load model and configuration"""
     try:
-        # 加载Streamlit配置
+        # Load Streamlit configuration
         with open('streamlit_config.json', 'r', encoding='utf-8') as f:
             config = json.load(f)
 
-        # 加载模型
+        # Load model
         with open(config['model_file'], 'rb') as f:
             model = pickle.load(f)
 
-        # 加载标准化器
+        # Load scaler
         with open(config['scaler_file'], 'rb') as f:
             scaler = pickle.load(f)
 
-        # 加载特征名称
+        # Load feature names
         feature_names = config['feature_names']
         optimal_threshold = config['optimal_threshold']
 
         return model, scaler, feature_names, optimal_threshold, config
 
     except Exception as e:
-        st.error(f"加载模型失败: {str(e)}")
+        st.error(f"Model loading failed: {str(e)}")
         return None, None, None, None, None
 
 
-# 加载模型
+# Load model
 model, scaler, feature_names, optimal_threshold, config = load_model_and_config()
 
 if model is None:
-    st.warning("⚠️ 无法加载模型，请确保模型文件存在。")
+    st.warning("⚠️ Unable to load model, please ensure model files exist.")
     st.stop()
 
-# 显示模型信息
+# Display model information
 with st.sidebar:
-    st.header("📊 模型信息")
-    st.markdown(f"**模型类型**: {config.get('model_name', 'XGBoost')}")
-    st.markdown(f"**特征数量**: {len(feature_names)}")
-    st.markdown(f"**最优阈值**: {optimal_threshold:.3f}")
+    st.header("📊 Model Information")
+    st.markdown(f"**Model Type**: {config.get('model_name', 'XGBoost')}")
+    st.markdown(f"**Number of Features**: {len(feature_names)}")
+    st.markdown(f"**Optimal Threshold**: {optimal_threshold:.3f}")
 
-    # 显示性能指标（如果存在）
+    # Display performance metrics (if available)
     if 'performance_metrics' in config:
         st.markdown("---")
-        st.subheader("模型性能")
+        st.subheader("Model Performance")
         metrics = config['performance_metrics']
         col1, col2 = st.columns(2)
         with col1:
             st.metric("AUC", f"{metrics.get('AUC', 0):.3f}")
-            st.metric("准确率", f"{metrics.get('Accuracy', 0):.3f}")
+            st.metric("Accuracy", f"{metrics.get('Accuracy', 0):.3f}")
         with col2:
-            st.metric("F1分数", f"{metrics.get('F1_score', 0):.3f}")
-            st.metric("召回率", f"{metrics.get('Recall', 0):.3f}")
+            st.metric("F1 Score", f"{metrics.get('F1_score', 0):.3f}")
+            st.metric("Recall", f"{metrics.get('Recall', 0):.3f}")
 
     st.markdown("---")
-    st.info("💡 **使用说明**: 填写所有参数后点击预测按钮")
+    st.info("💡 **Instructions**: Fill all parameters and click Predict button")
 
-# 主内容区 - 输入表单
-st.header("📝 输入参数")
+# Main content area - Input form
+st.header("📝 Input Parameters")
 
-# 创建输入列
+# Create input columns
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("基本生理参数")
-    age = st.slider("**年龄**", 18, 90, 50, help="选择年龄（18-90岁）")
-    weight = st.slider("**体重 (kg)**", 40.0, 120.0, 60.0, 0.1, help="输入体重（40-120kg）")
-    height = st.slider("**身高 (cm)**", 140.0, 200.0, 165.0, 0.1, help="输入身高（140-200cm）")
-    bmi = st.slider("**BMI**", 15.0, 40.0, 22.0, 0.1, help="身体质量指数（15-40）")
+    st.subheader("Basic Physiological Parameters")
+    age = st.slider("**Age**", 18, 90, 50, help="Select age (18-90 years)")
+    weight = st.slider("**Weight (kg)**", 40.0, 120.0, 60.0, 0.1, help="Enter weight (40-120 kg)")
+    height = st.slider("**Height (cm)**", 140.0, 200.0, 165.0, 0.1, help="Enter height (140-200 cm)")
+    bmi = st.slider("**BMI**", 15.0, 40.0, 22.0, 0.1, help="Body Mass Index (15-40)")
 
 with col2:
-    st.subheader("医疗参数")
-    alt = st.slider("**ALT (U/L)**", 0.0, 100.0, 20.0, 0.1, help="丙氨酸氨基转移酶（0-100 U/L）")
-    pulse = st.slider("**脉搏 (次/分)**", 40, 120, 72, help="脉搏次数（40-120次/分）")
+    st.subheader("Medical Parameters")
+    alt = st.slider("**ALT (U/L)**", 0.0, 100.0, 20.0, 0.1, help="Alanine aminotransferase (0-100 U/L)")
+    pulse = st.slider("**Pulse (bpm)**", 40, 120, 72, help="Pulse rate (40-120 beats per minute)")
 
-    st.subheader("时间参数")
-    month_sin = st.slider("**月份正弦值**", -1.0, 1.0, 0.0, 0.01, help="月份的正弦值（-1到1）")
-    month_cos = st.slider("**月份余弦值**", -1.0, 1.0, 1.0, 0.01, help="月份的余弦值（-1到1）")
-    hour_sin = st.slider("**小时正弦值**", -1.0, 1.0, 0.0, 0.01, help="小时的正弦值（-1到1）")
-    hour_cos = st.slider("**小时余弦值**", -1.0, 1.0, 1.0, 0.01, help="小时的余弦值（-1到1）")
+    st.subheader("Time Parameters")
+    st.markdown("Select the date and time for prediction")
 
-# 预测按钮和结果区域
+    # Get current date and time as default
+    current_date = datetime.date.today()
+    current_time = datetime.datetime.now().time()
+
+    # Date picker
+    date_input = st.date_input(
+        "**Date**",
+        value=current_date,
+        help="Select prediction date"
+    )
+
+    # Time picker
+    time_input = st.time_input(
+        "**Time**",
+        value=current_time,
+        help="Select prediction time (24-hour format)"
+    )
+
+    # Calculate time features
+    month_sin, month_cos, hour_sin, hour_cos = calculate_time_features(date_input, time_input)
+
+    # Display conversion results
+    st.markdown("**Time Feature Conversion:**")
+    col_time1, col_time2 = st.columns(2)
+    with col_time1:
+        st.write(f"Month: {date_input.month}")
+        st.write(f"month_sin: {month_sin:.4f}")
+        st.write(f"month_cos: {month_cos:.4f}")
+    with col_time2:
+        st.write(f"Hour: {time_input.hour}:{time_input.minute:02d}")
+        st.write(f"hour_sin: {hour_sin:.4f}")
+        st.write(f"hour_cos: {hour_cos:.4f}")
+
+# Prediction button and result area
 st.markdown("---")
-st.header("🔮 预测结果")
+st.header("🔮 Prediction Results")
 
-# 创建预测按钮列
+# Create prediction button column
 predict_col, result_col = st.columns([1, 2])
 
 with predict_col:
-    predict_button = st.button("开始预测", type="primary", use_container_width=True)
+    predict_button = st.button("Start Prediction", type="primary", use_container_width=True)
 
-# 初始化结果状态
+# Initialize result state
 if 'prediction_result' not in st.session_state:
     st.session_state.prediction_result = None
     st.session_state.prediction_prob = None
     st.session_state.feature_values = None
+    st.session_state.time_features = None
 
-# 处理预测
+# Handle prediction
 if predict_button:
-    with st.spinner("正在计算..."):
+    with st.spinner("Calculating..."):
         try:
-            # 准备特征数据（必须按照训练时的特征顺序）
+            # Recalculate time features
+            month_sin, month_cos, hour_sin, hour_cos = calculate_time_features(date_input, time_input)
+
+            # Prepare feature data (must follow training feature order)
             feature_values = {
                 'age': age,
                 'alt': alt,
@@ -136,159 +198,262 @@ if predict_button:
                 'hour_cos': hour_cos
             }
 
-            # 确保所有特征都存在
+            # Store time features separately for display
+            st.session_state.time_features = {
+                'date': date_input.strftime("%Y-%m-%d"),
+                'time': time_input.strftime("%H:%M"),
+                'month_sin': month_sin,
+                'month_cos': month_cos,
+                'hour_sin': hour_sin,
+                'hour_cos': hour_cos
+            }
+
+            # Ensure all features exist
             input_features = []
             for feature in feature_names:
                 if feature in feature_values:
                     input_features.append(feature_values[feature])
                 else:
-                    # 如果特征不存在，使用默认值
-                    st.warning(f"特征 '{feature}' 不在输入中，使用默认值0")
+                    # If feature doesn't exist, use default value
+                    st.warning(f"Feature '{feature}' not in input, using default value 0")
                     input_features.append(0)
 
-            # 转换为numpy数组
+            # Convert to numpy array
             X_input = np.array([input_features])
 
-            # 数据标准化
+            # Data standardization
             X_scaled = scaler.transform(X_input)
 
-            # 预测
+            # Prediction
             probability = model.predict_proba(X_scaled)[0, 1]
             prediction = 1 if probability >= optimal_threshold else 0
 
-            # 保存结果到session state
+            # Save results to session state
             st.session_state.prediction_result = prediction
             st.session_state.prediction_prob = probability
             st.session_state.feature_values = feature_values
 
         except Exception as e:
-            st.error(f"预测过程中出错: {str(e)}")
+            st.error(f"Error during prediction: {str(e)}")
 
-# 显示结果
+# Display results
 with result_col:
     if st.session_state.prediction_result is not None:
         probability = st.session_state.prediction_prob
         prediction = st.session_state.prediction_result
 
-        # 显示概率仪表
-        st.subheader("预测结果")
+        # Display probability gauge
+        st.subheader("Prediction Result")
 
-        # 创建两列显示结果
+        # Create two columns for results
         result_col1, result_col2 = st.columns(2)
 
         with result_col1:
-            # 血压状态指示
+            # Blood pressure status indicator
             if prediction == 0:
-                st.success("✅ **正常血压**")
-                st.metric("异常概率", f"{probability:.3f}")
+                st.success("✅ **Normal Blood Pressure**")
+                st.metric("Abnormal Probability", f"{probability:.3f}")
             else:
-                st.error("⚠️ **异常血压**")
-                st.metric("异常概率", f"{probability:.3f}")
+                st.error("⚠️ **Abnormal Blood Pressure**")
+                st.metric("Abnormal Probability", f"{probability:.3f}")
 
-            # 阈值指示
+            # Threshold indicator
             st.progress(float(probability))
-            st.caption(f"阈值: {optimal_threshold:.3f}")
+            st.caption(f"Threshold: {optimal_threshold:.3f}")
 
         with result_col2:
-            # 显示详细信息
-            st.markdown("#### 详细分析")
+            # Display detailed analysis
+            st.markdown("#### Detailed Analysis")
 
-            # 计算风险等级
+            # Calculate risk level
             if probability < 0.3:
-                risk_level = "低风险"
+                risk_level = "Low Risk"
                 risk_color = "green"
             elif probability < 0.7:
-                risk_level = "中风险"
+                risk_level = "Medium Risk"
                 risk_color = "orange"
             else:
-                risk_level = "高风险"
+                risk_level = "High Risk"
                 risk_color = "red"
 
-            st.markdown(f"**风险等级**: :{risk_color}[{risk_level}]")
+            st.markdown(f"**Risk Level**: :{risk_color}[{risk_level}]")
 
-            # 建议
+            # Recommendations
             if prediction == 0:
-                st.markdown("**建议**: 保持健康生活方式，定期监测血压")
+                st.markdown("**Recommendation**: Maintain healthy lifestyle, monitor blood pressure regularly")
             else:
-                st.markdown("**建议**: 建议进行进一步检查并咨询医生")
+                st.markdown("**Recommendation**: Consider further examination and consult a doctor")
 
-        # 显示输入参数回顾
+        # Display input parameters review
         st.markdown("---")
-        with st.expander("📋 查看输入参数"):
+        with st.expander("📋 View Input Parameters"):
             if st.session_state.feature_values:
                 param_df = pd.DataFrame(
                     list(st.session_state.feature_values.items()),
-                    columns=['参数', '值']
+                    columns=['Parameter', 'Value']
                 )
                 st.table(param_df)
 
+            if st.session_state.time_features:
+                st.markdown("**Time Features:**")
+                time_df = pd.DataFrame(
+                    list(st.session_state.time_features.items()),
+                    columns=['Time Parameter', 'Value']
+                )
+                st.table(time_df)
+
     else:
-        st.info("👆 点击'开始预测'按钮查看结果")
+        st.info("👆 Click 'Start Prediction' button to see results")
 
-# 特征重要性展示（如果可用）
+# Feature importance visualization with force diagram
 try:
-    if hasattr(model, 'feature_importances_'):
+    if hasattr(model, 'feature_importances_') and st.session_state.prediction_result is not None:
         st.markdown("---")
-        st.header("📊 特征重要性分析")
+        st.header("📊 Feature Contribution Analysis (Force Diagram)")
 
-        # 获取特征重要性
+        # Get feature importances
         importances = model.feature_importances_
 
-        # 创建DataFrame
-        importance_df = pd.DataFrame({
-            '特征': feature_names,
-            '重要性': importances
-        }).sort_values('重要性', ascending=False)
+        # Get current feature values
+        if st.session_state.feature_values:
+            # Create feature contribution visualization
+            feature_contributions = []
 
-        # 显示条形图
-        st.bar_chart(importance_df.set_index('特征')['重要性'])
+            for i, feature_name in enumerate(feature_names):
+                if feature_name in st.session_state.feature_values:
+                    feature_value = st.session_state.feature_values[feature_name]
+                    # Calculate contribution (importance * normalized value)
+                    # For XGBoost, we can use feature importances as weights
+                    contribution = importances[i] * feature_value
+                    feature_contributions.append({
+                        'Feature': feature_name,
+                        'Importance': importances[i],
+                        'Value': feature_value,
+                        'Contribution': contribution,
+                        'AbsContribution': abs(contribution)
+                    })
 
-        # 显示表格
-        with st.expander("查看详细特征重要性"):
-            st.dataframe(importance_df, use_container_width=True)
+            # Create DataFrame
+            contribution_df = pd.DataFrame(feature_contributions)
+            contribution_df = contribution_df.sort_values('AbsContribution', ascending=False)
+
+            # Display top contributing features
+            st.markdown("#### Top Contributing Features")
+
+            # Create force diagram visualization
+            fig, ax = plt.subplots(figsize=(12, 8))
+
+            # Prepare data for plotting (top 10 features)
+            top_features = contribution_df.head(10)
+            features = top_features['Feature'].tolist()
+            contributions = top_features['Contribution'].tolist()
+
+            # Color code: positive contributions (increase risk) in red, negative in blue
+            colors = ['#FF6B6B' if c > 0 else '#4ECDC4' for c in contributions]
+
+            # Create horizontal bar chart (force diagram style)
+            y_pos = np.arange(len(features))
+
+            # Plot bars
+            bars = ax.barh(y_pos, contributions, color=colors, alpha=0.7, edgecolor='black')
+
+            # Add value labels
+            for i, (bar, val) in enumerate(zip(bars, contributions)):
+                width = bar.get_width()
+                label_x = width + (0.01 * max(contributions) if width >= 0 else 0.01 * min(contributions))
+                ax.text(label_x, bar.get_y() + bar.get_height() / 2,
+                        f'{val:.4f}',
+                        va='center', ha='left' if width >= 0 else 'right',
+                        fontsize=9, fontweight='bold')
+
+            # Set chart properties
+            ax.set_yticks(y_pos)
+            ax.set_yticklabels(features, fontsize=10)
+            ax.set_xlabel('Contribution Value', fontsize=12, fontweight='bold')
+            ax.set_title('Feature Contribution Force Diagram', fontsize=14, fontweight='bold', pad=20)
+
+            # Add grid lines
+            ax.grid(True, alpha=0.3, linestyle='--', axis='x')
+
+            # Add zero reference line
+            ax.axvline(x=0, color='black', linestyle='-', linewidth=0.8, alpha=0.5)
+
+            # Add legend
+            import matplotlib.patches as mpatches
+
+            pos_patch = mpatches.Patch(color='#FF6B6B', alpha=0.7, label='Positive Contribution (Increase Risk)')
+            neg_patch = mpatches.Patch(color='#4ECDC4', alpha=0.7, label='Negative Contribution (Decrease Risk)')
+            ax.legend(handles=[pos_patch, neg_patch], loc='upper right', fontsize=10)
+
+            # Add prediction probability info
+            info_text = f"Prediction Probability: {probability:.3f} | Threshold: {optimal_threshold:.3f}"
+            ax.text(0.5, -0.1, info_text, transform=ax.transAxes,
+                    fontsize=11, ha='center', va='center',
+                    bbox=dict(boxstyle='round,pad=0.5', facecolor='lightblue', alpha=0.3))
+
+            plt.tight_layout()
+            st.pyplot(fig)
+
+            # Display detailed contribution table
+            with st.expander("View Detailed Contribution Analysis"):
+                st.dataframe(contribution_df, use_container_width=True)
+
+                # Additional analysis
+                st.markdown("##### Contribution Summary")
+                total_positive = contribution_df[contribution_df['Contribution'] > 0]['Contribution'].sum()
+                total_negative = contribution_df[contribution_df['Contribution'] < 0]['Contribution'].sum()
+                net_contribution = total_positive + total_negative
+
+                col_sum1, col_sum2, col_sum3 = st.columns(3)
+                with col_sum1:
+                    st.metric("Positive Contributions", f"{total_positive:.4f}")
+                with col_sum2:
+                    st.metric("Negative Contributions", f"{total_negative:.4f}")
+                with col_sum3:
+                    st.metric("Net Contribution", f"{net_contribution:.4f}")
 
 except Exception as e:
-    # 如果无法获取特征重要性，跳过
-    pass
+    # If unable to create force diagram, skip
+    st.warning(f"Unable to create force diagram: {str(e)}")
 
-# 血压分类标准参考
+# Blood pressure classification reference
 st.markdown("---")
-st.header("📚 血压分类标准参考")
+st.header("📚 Blood Pressure Classification Reference")
 
 col_ref1, col_ref2 = st.columns(2)
 
 with col_ref1:
     st.markdown("""
-    ### 血压分类标准
-    | 分类 | 收缩压 (mmHg) | 舒张压 (mmHg) |
-    |------|---------------|---------------|
-    | 正常血压 | < 120 | < 80 |
-    | 正常高值 | 120-129 | 80-84 |
-    | 1级高血压 | 130-139 | 85-89 |
-    | 2级高血压 | 140-159 | 90-99 |
-    | 3级高血压 | ≥ 160 | ≥ 100 |
+    ### Blood Pressure Classification
+    | Category | Systolic (mmHg) | Diastolic (mmHg) |
+    |----------|-----------------|------------------|
+    | Normal | < 120 | < 80 |
+    | Elevated | 120-129 | 80-84 |
+    | Stage 1 Hypertension | 130-139 | 85-89 |
+    | Stage 2 Hypertension | 140-159 | 90-99 |
+    | Stage 3 Hypertension | ≥ 160 | ≥ 100 |
     """)
 
 with col_ref2:
     st.markdown("""
-    ### 注意事项
-    1. **本工具为预测工具**，结果仅供参考
-    2. **实际诊断**请以医疗机构测量为准
-    3. **建议**定期监测血压
-    4. **保持**健康生活方式
-    5. **如有异常**及时就医
+    ### Important Notes
+    1. **This is a prediction tool** - results are for reference only
+    2. **Actual diagnosis** should be based on medical institution measurements
+    3. **Recommend** regular blood pressure monitoring
+    4. **Maintain** a healthy lifestyle
+    5. **If abnormal** consult a doctor promptly
     """)
 
-# 页脚
+# Footer
 st.markdown("---")
-st.caption("💡 注意：本工具基于机器学习模型预测，准确率受训练数据影响")
-st.caption("🔒 隐私保护：所有计算在服务器完成，不保存任何用户数据")
-st.caption(f"🔄 最后更新: {config.get('training_info', {}).get('deployment_date', '未知')}")
+st.caption("💡 Note: This tool is based on machine learning models, accuracy depends on training data")
+st.caption("🔒 Privacy Protection: All calculations are done on the server, no user data is saved")
+st.caption(f"🔄 Last Updated: {config.get('training_info', {}).get('deployment_date', 'Unknown')}")
 
-# 调试信息（仅在开发模式下显示）
-if st.sidebar.checkbox("显示调试信息", False):
+# Debug information (only shown in development mode)
+if st.sidebar.checkbox("Show Debug Information", False):
     st.sidebar.markdown("---")
-    st.sidebar.subheader("调试信息")
+    st.sidebar.subheader("Debug Information")
     st.sidebar.json(config)
-    st.sidebar.write(f"特征名称: {feature_names}")
-    st.sidebar.write(f"特征数量: {len(feature_names)}")
+    st.sidebar.write(f"Feature Names: {feature_names}")
+    st.sidebar.write(f"Number of Features: {len(feature_names)}")
