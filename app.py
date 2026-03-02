@@ -24,26 +24,29 @@ st.markdown("### Machine Learning-Based Blood Pressure Anomaly Detection System"
 
 
 # Time conversion function
-def calculate_time_features(date_input, time_input):
+def calculate_time_features(date_input, hour_input, minute_input):
     """
-    Calculate sine and cosine values for month and hour from date and time
+    Calculate sine and cosine values for month and hour from date, hour and minute
 
     Parameters:
         date_input: datetime.date object
-        time_input: datetime.time object
+        hour_input: int (0-23)
+        minute_input: int (0-59)
 
     Returns:
         month_sin, month_cos, hour_sin, hour_cos
     """
-    # Extract month (1-12) and hour (0-23)
+    # Extract month (1-12)
     month = date_input.month
-    hour = time_input.hour
+
+    # Calculate decimal hour (hour + minute/60)
+    hour_decimal = hour_input + (minute_input / 60.0)
 
     # Calculate sine and cosine values (consistent with training formula)
     month_sin = math.sin(2 * math.pi * month / 12)
     month_cos = math.cos(2 * math.pi * month / 12)
-    hour_sin = math.sin(2 * math.pi * hour / 24)
-    hour_cos = math.cos(2 * math.pi * hour / 24)
+    hour_sin = math.sin(2 * math.pi * hour_decimal / 24)
+    hour_cos = math.cos(2 * math.pi * hour_decimal / 24)
 
     return month_sin, month_cos, hour_sin, hour_cos
 
@@ -129,7 +132,7 @@ with col2:
 
     # Get current date and time as default
     current_date = datetime.date.today()
-    current_time = datetime.datetime.now().time()
+    current_time = datetime.datetime.now()
 
     # Date picker
     date_input = st.date_input(
@@ -138,27 +141,36 @@ with col2:
         help="Select prediction date"
     )
 
-    # Time picker
-    time_input = st.time_input(
-        "**Time**",
-        value=current_time,
-        help="Select prediction time (24-hour format)"
+    # Hour selector (0-23)
+    hour_input = st.slider(
+        "**Hour**",
+        min_value=0,
+        max_value=23,
+        value=current_time.hour,
+        help="Select hour (0-23)"
+    )
+
+    # Minute selector (0-59)
+    minute_input = st.slider(
+        "**Minute**",
+        min_value=0,
+        max_value=59,
+        value=current_time.minute,
+        help="Select minute (0-59)"
     )
 
     # Calculate time features
-    month_sin, month_cos, hour_sin, hour_cos = calculate_time_features(date_input, time_input)
+    month_sin, month_cos, hour_sin, hour_cos = calculate_time_features(date_input, hour_input, minute_input)
 
-    # Display conversion results
+    # Display conversion results (only sin values)
     st.markdown("**Time Feature Conversion:**")
     col_time1, col_time2 = st.columns(2)
     with col_time1:
         st.write(f"Month: {date_input.month}")
         st.write(f"month_sin: {month_sin:.4f}")
-        st.write(f"month_cos: {month_cos:.4f}")
     with col_time2:
-        st.write(f"Hour: {time_input.hour}:{time_input.minute:02d}")
+        st.write(f"Time: {hour_input:02d}:{minute_input:02d}")
         st.write(f"hour_sin: {hour_sin:.4f}")
-        st.write(f"hour_cos: {hour_cos:.4f}")
 
 # Prediction button and result area
 st.markdown("---")
@@ -182,7 +194,7 @@ if predict_button:
     with st.spinner("Calculating..."):
         try:
             # Recalculate time features
-            month_sin, month_cos, hour_sin, hour_cos = calculate_time_features(date_input, time_input)
+            month_sin, month_cos, hour_sin, hour_cos = calculate_time_features(date_input, hour_input, minute_input)
 
             # Prepare feature data (must follow training feature order)
             feature_values = {
@@ -201,11 +213,9 @@ if predict_button:
             # Store time features separately for display
             st.session_state.time_features = {
                 'date': date_input.strftime("%Y-%m-%d"),
-                'time': time_input.strftime("%H:%M"),
+                'time': f"{hour_input:02d}:{minute_input:02d}",
                 'month_sin': month_sin,
-                'month_cos': month_cos,
-                'hour_sin': hour_sin,
-                'hour_cos': hour_cos
+                'hour_sin': hour_sin
             }
 
             # Ensure all features exist
@@ -288,8 +298,20 @@ with result_col:
         st.markdown("---")
         with st.expander("📋 View Input Parameters"):
             if st.session_state.feature_values:
+                # Create display dictionary without cos values
+                display_features = {
+                    'age': st.session_state.feature_values.get('age'),
+                    'alt': st.session_state.feature_values.get('alt'),
+                    'height': st.session_state.feature_values.get('height'),
+                    'weight': st.session_state.feature_values.get('weight'),
+                    'pulse': st.session_state.feature_values.get('pulse'),
+                    'BMI': st.session_state.feature_values.get('BMI'),
+                    'month_sin': st.session_state.feature_values.get('month_sin'),
+                    'hour_sin': st.session_state.feature_values.get('hour_sin')
+                }
+
                 param_df = pd.DataFrame(
-                    list(st.session_state.feature_values.items()),
+                    list(display_features.items()),
                     columns=['Parameter', 'Value']
                 )
                 st.table(param_df)
